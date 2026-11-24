@@ -1,4 +1,8 @@
-import { AuthPreviewOperateScope, type EnvironmentId } from "@t3tools/contracts";
+import {
+  AuthPreviewOperateScope,
+  DESKTOP_TRAY_NEW_THREAD_ACTION,
+  type EnvironmentId,
+} from "@t3tools/contracts";
 import type { AnyRouter } from "@tanstack/react-router";
 import { msg } from "gt-react";
 
@@ -32,7 +36,7 @@ import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../termina
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { useUiStateStore } from "../uiStateStore";
-import { type CommandHandler, registerCommands } from "./dispatcher";
+import { type CommandHandler, registerCommands, registerMenuAction } from "./dispatcher";
 
 const CHAT_ROUTE_ID = "/_chat";
 
@@ -113,12 +117,30 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
     event.stopPropagation();
   };
 
-  const startNewLocal: CommandHandler = (event) => {
-    claim(event);
+  const openNewLocal = () => {
     // With no current or open project, such as when every project is archived, pick one.
     void startNewThreadFromContext(readThreadContext()).then((started) => {
       if (!started) openCommandPalette({ open: "new-thread-in" });
     });
+  };
+
+  const startNewLocal: CommandHandler = (event) => {
+    claim(event);
+    openNewLocal();
+  };
+  const startNewThread = () => {
+    const groups = readProjectGroups();
+    if (
+      shouldCreateNewThreadInCurrentProject(
+        false,
+        groups.filter((group) => !group.archived).length,
+        groups.length,
+      )
+    ) {
+      openNewLocal();
+    } else {
+      openCommandPalette({ open: "new-thread-in" });
+    }
   };
 
   const previewCommand =
@@ -136,7 +158,7 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
       previewCommand(action)(event);
     };
 
-  return registerCommands(
+  const unregisterCommands = registerCommands(
     {
       "chat.newLocal": startNewLocal,
       "chat.newWithoutProject": (event) => {
@@ -149,19 +171,8 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
         void scratch.startScratchThread(environmentId);
       },
       "chat.new": (event) => {
-        const groups = readProjectGroups();
-        if (
-          !shouldCreateNewThreadInCurrentProject(
-            false,
-            groups.filter((group) => !group.archived).length,
-            groups.length,
-          )
-        ) {
-          claim(event);
-          openCommandPalette({ open: "new-thread-in" });
-          return;
-        }
-        startNewLocal(event);
+        claim(event);
+        startNewThread();
       },
       "preview.toggle": (event) => {
         claim(event);
@@ -220,4 +231,11 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
       },
     },
   );
+  const unregisterTrayNewThread = registerMenuAction(DESKTOP_TRAY_NEW_THREAD_ACTION, () => {
+    if (router.state.matches.some((match) => match.routeId === CHAT_ROUTE_ID)) startNewThread();
+  });
+  return () => {
+    unregisterCommands();
+    unregisterTrayNewThread();
+  };
 }

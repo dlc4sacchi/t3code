@@ -11,7 +11,7 @@ import type {
 } from "./browserImport.ts";
 import { AuthAccessTokenResult, AuthSessionState } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
-import { ExecutionEnvironmentDescriptor } from "./environment.ts";
+import { ExecutionEnvironmentDescriptor, ScopedThreadRef } from "./environment.ts";
 import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
 import type { EditorId } from "./editor.ts";
 import { KeybindingShortcut, type PreviewForwardedShortcut } from "./keybindings.ts";
@@ -1108,7 +1108,27 @@ export const DesktopAppleSpeechTranscribeInputSchema = Schema.Struct({
 export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
 export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
+export const DESKTOP_TRAY_MAX_THREADS_PER_SECTION = 12;
+export const DESKTOP_TRAY_MAX_TITLE_LENGTH = 100;
+const DesktopTrayThread = Schema.Struct({
+  ref: ScopedThreadRef,
+  title: Schema.String.check(Schema.isMaxLength(DESKTOP_TRAY_MAX_TITLE_LENGTH)),
+});
+const DesktopTrayThreads = Schema.Array(DesktopTrayThread).check(
+  Schema.isMaxLength(DESKTOP_TRAY_MAX_THREADS_PER_SECTION),
+);
+export const DesktopTraySnapshot = Schema.Struct({
+  inbox: DesktopTrayThreads,
+  working: DesktopTrayThreads,
+  needsAttentionBadge: Schema.Boolean,
+});
+export type DesktopTraySnapshot = typeof DesktopTraySnapshot.Type;
+
+export const DESKTOP_TRAY_NEW_THREAD_ACTION = "tray:new-thread";
+export const DESKTOP_TRAY_OPEN_THREAD_PREFIX = "tray:open-thread:";
+
 export interface DesktopBridge {
+  setTraySnapshot?: (snapshot: DesktopTraySnapshot) => Promise<void>;
   getAppBranding: () => DesktopAppBranding | null;
   /** `null` until the desktop host has read the login shell's environment; ask again later. */
   getRelayTelemetryEnabled: () => boolean | null;
