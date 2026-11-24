@@ -1,9 +1,12 @@
+import { deadlineStore } from "@t3tools/client-runtime/clock";
 import {
   threadRuntimeIsActive,
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/models";
-import { hasUnseenRunFailure } from "@t3tools/client-runtime/state/thread-settled";
-import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import {
+  effectiveSnoozed,
+  hasUnseenRunFailure,
+} from "@t3tools/client-runtime/state/thread-settled";
 import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
 import { threadKey } from "@t3tools/client-runtime/state/entities";
 import {
@@ -15,11 +18,7 @@ import {
 } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
-import {
-  hasUnseenCompletion,
-  resolveSidebarRowStatus,
-  resolveThreadLastVisitedAt,
-} from "./components/Sidebar.logic";
+import { resolveSidebarRowStatus, resolveThreadLastVisitedAt } from "./components/Sidebar.logic";
 import type { AppRouter } from "./router";
 import { appAtomRegistry } from "./rpc/atomRegistry";
 import { environmentThreadShells } from "./state/threads";
@@ -42,6 +41,7 @@ const trayThreadsAtom = Atom.make((get) => {
 export function buildDesktopTraySnapshot(
   threads: ReadonlyArray<EnvironmentThreadShell>,
   localVisits: Readonly<Record<string, string>>,
+  now = new Date().toISOString(),
 ): DesktopTraySnapshot {
   const inbox: Array<DesktopTraySnapshot["inbox"][number]> = [];
   const working: Array<DesktopTraySnapshot["working"][number]> = [];
@@ -62,17 +62,11 @@ export function buildDesktopTraySnapshot(
       status === "limited" ||
       status === "failed" ||
       hasUnseenRunFailure(visitedThread);
+    if (effectiveSnoozed(thread, { now })) continue;
     needsAttentionBadge ||= blocked;
 
-    const section = blocked
-      ? inbox
-      : threadRuntimeIsActive(thread.runtime)
-        ? working
-        : !backgroundWorkHoldsCompletion(thread.pendingBackgroundTasks) &&
-            hasUnseenCompletion(visitedThread)
-          ? inbox
-          : null;
-    if (section && section.length < DESKTOP_TRAY_MAX_THREADS_PER_SECTION) {
+    const section = !blocked && threadRuntimeIsActive(thread.runtime) ? working : inbox;
+    if (section.length < DESKTOP_TRAY_MAX_THREADS_PER_SECTION) {
       section.push({
         ref,
         title: thread.title
@@ -96,11 +90,26 @@ export function startDesktopTray(router: AppRouter): void {
   const setSnapshot = bridge?.setTraySnapshot;
   if (!setSnapshot) return;
 
+  let nextWake = Infinity;
+  let unsubscribeWake: (() => void) | undefined;
   let published = "";
   let displayedThreads = new Map<string, ScopedThreadRef>();
 
   const publish = () => {
     const threads = appAtomRegistry.get(trayThreadsAtom);
+    const now = Date.now();
+    let soonest = Infinity;
+    for (const thread of threads) {
+      const wake = Date.parse(thread.snoozedUntil ?? "");
+      if (wake > now && wake < soonest) soonest = wake;
+    }
+    if (soonest !== nextWake) {
+      unsubscribeWake?.();
+      nextWake = soonest;
+      unsubscribeWake = Number.isFinite(soonest)
+        ? deadlineStore(soonest).subscribe(publish)
+        : undefined;
+    }
     const { threadLastVisitedAtById } = useUiStateStore.getState();
     const snapshot = buildDesktopTraySnapshot(threads, threadLastVisitedAtById);
     const key = JSON.stringify(snapshot);
