@@ -1,0 +1,13 @@
+[Unit]
+Description=T3 Code thread indicator for GNOME
+PartOf=graphical-session.target
+After=graphical-session-pre.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/share/t3-thread-indicator/indicator.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

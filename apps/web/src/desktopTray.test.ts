@@ -28,7 +28,7 @@ function completedThread(environmentId: EnvironmentId, title: string) {
 }
 
 describe("desktop tray snapshot", () => {
-  it("uses the server visit in preference to a local visit and scopes identical IDs to their environments", () => {
+  it("includes read and unread threads even when they share an ID across environments", () => {
     const read = completedThread(local, "Read locally");
     const unread = { ...completedThread(remote, "Unread remotely"), lastVisitedAt: before };
     const localVisits = {
@@ -37,13 +37,16 @@ describe("desktop tray snapshot", () => {
     };
 
     expect(buildDesktopTraySnapshot([read, unread], localVisits)).toEqual({
-      inbox: [{ ref: { environmentId: remote, threadId }, title: "Unread remotely" }],
+      inbox: [
+        { ref: { environmentId: local, threadId }, title: "Read locally" },
+        { ref: { environmentId: remote, threadId }, title: "Unread remotely" },
+      ],
       working: [],
       needsAttentionBadge: false,
     });
   });
 
-  it("puts blockers and errors in the inbox, separates active work and skips settled threads", () => {
+  it("puts blockers and errors in the inbox, separates active work and skips settled or snoozed threads", () => {
     const thread = completedThread(local, "Fixture");
     const approval = { ...thread, title: "Approval", hasPendingApprovals: true };
     const input = { ...thread, title: "User input", hasPendingUserInput: true };
@@ -60,10 +63,20 @@ describe("desktop tray snapshot", () => {
     });
     const settled = { ...input, title: "Settled", settledOverride: "settled" } as const;
     const quiet = { ...thread, title: "Read", lastVisitedAt: completed };
+    const snoozed = { ...thread, title: "Snoozed", snoozedUntil: "2026-06-21T00:00:00.000Z" };
 
-    const snapshot = buildDesktopTraySnapshot([approval, error, active, settled, quiet, input], {});
+    const snapshot = buildDesktopTraySnapshot(
+      [approval, error, active, settled, quiet, snoozed, input],
+      {},
+      completed,
+    );
 
-    expect(snapshot.inbox.map(({ title }) => title)).toEqual(["Approval", "Error", "User input"]);
+    expect(snapshot.inbox.map(({ title }) => title)).toEqual([
+      "Approval",
+      "Error",
+      "Read",
+      "User input",
+    ]);
     expect(snapshot.working.map(({ title }) => title)).toEqual(["Active"]);
     expect(snapshot.needsAttentionBadge).toBe(true);
     expect(buildDesktopTraySnapshot([active, settled, quiet], {}).needsAttentionBadge).toBe(false);
