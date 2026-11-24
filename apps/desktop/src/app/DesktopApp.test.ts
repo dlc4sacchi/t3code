@@ -28,6 +28,7 @@ vi.mock("./DesktopStartupRecovery.ts", () => ({ listen: Effect.void }));
 import * as DesktopApp from "./DesktopApp.ts";
 import * as DesktopAppActivation from "./DesktopAppActivation.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
+import * as DesktopAssets from "./DesktopAssets.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopLegacyLocalStorage from "./DesktopLegacyLocalStorage.ts";
@@ -163,6 +164,14 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
         Effect.provideService(DesktopLegacyLocalStorage.DesktopLegacyLocalStorage, {
           load: () => Effect.void,
         } as unknown as DesktopLegacyLocalStorage.DesktopLegacyLocalStorage["Service"]),
+        Effect.provideService(DesktopAssets.DesktopAssets, {
+          iconPaths: Effect.succeed({
+            ico: Option.none(),
+            icns: Option.none(),
+            png: Option.none(),
+          }),
+          resolveResourcePath: () => Effect.succeedNone,
+        }),
         Effect.provideService(DesktopSnapShot.DesktopSnapShot, {
           initialize: Effect.void,
         } as DesktopSnapShot.DesktopSnapShot["Service"]),

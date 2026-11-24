@@ -117,6 +117,12 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   },
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   getClientPlatform: () => clientPlatform,
+  ...(clientPlatform === "linux"
+    ? {
+        setTraySnapshot: (snapshot: Parameters<NonNullable<DesktopBridge["setTraySnapshot"]>>[0]) =>
+          ipcRenderer.invoke(IpcChannels.SET_TRAY_SNAPSHOT_CHANNEL, snapshot),
+      }
+    : {}),
   restartAudioService: () => ipcRenderer.invoke(IpcChannels.RESTART_AUDIO_SERVICE_CHANNEL),
   setNotificationBadge: (badge) =>
     ipcRenderer.invoke(IpcChannels.SET_NOTIFICATION_BADGE_CHANNEL, badge),
